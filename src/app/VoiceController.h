@@ -5,6 +5,7 @@
 
 #include <QObject>
 #include <QSet>
+#include <QTimer>
 
 class Session;
 struct VoiceState;
@@ -68,6 +69,8 @@ private:
     void setSelfState(bool muted, bool deafened);
     void resetChannel();
     void updateParticipants();
+    void updateHotkeyTimer();
+    void pollHotkeys();
 
     Session* m_session;
     VoiceConnection* m_connection;
@@ -88,4 +91,7 @@ private:
     bool m_participantsKnown = false;
     QList<int> m_pingHistory;
     bool m_demoCall = false;
+    QTimer m_hotkeyTimer;
+    int m_toggleMuteKey = 0;
+    bool m_toggleMuteKeyDown = false;
 };

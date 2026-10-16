@@ -13,6 +13,7 @@ struct VoiceSettings
     float activationThresholdDb = -50.0f; // voice activity threshold, in dBFS
     int pushToTalkKey = 0;                // native key code, 0 = not set
     int pushToTalkReleaseMs = 200;        // keeps transmitting briefly after the key is released
+    int toggleMuteKey = 0;                // native key code to toggle microphone mute, 0 = not set
     float inputVolume = 1.0f;             // 0..2
     float outputVolume = 1.0f;            // 0..2
     bool automaticSensitivity = true;     // voice detection decides instead of the dB threshold

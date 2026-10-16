@@ -151,6 +151,7 @@ protected:
 
 private:
     QWidget* buildVoicePage();
+    QWidget* buildKeybindsPage();
     QWidget* buildAppearancePage();
     QWidget* buildSoundsPage();
     QWidget* buildNotificationsPage();
@@ -188,6 +189,8 @@ private:
     QWidget* m_sensitivityGroup = nullptr;
     QWidget* m_pushToTalkGroup = nullptr;
     KeybindButton* m_keybind = nullptr;
+    KeybindButton* m_toggleMuteKeybind = nullptr;
+    QPushButton* m_clearToggleMuteKeybind = nullptr;
     QSlider* m_releaseDelay = nullptr;
     QLabel* m_releaseDelayLabel = nullptr;
     QCheckBox* m_automaticSensitivity = nullptr;

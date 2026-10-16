@@ -15,6 +15,7 @@ VoiceSettings VoiceSettings::load()
     result.activationThresholdDb = settings.value(QStringLiteral("activationThresholdDb"), -50.0).toFloat();
     result.pushToTalkKey = settings.value(QStringLiteral("pushToTalkKey"), 0).toInt();
     result.pushToTalkReleaseMs = settings.value(QStringLiteral("pushToTalkReleaseMs"), 200).toInt();
+    result.toggleMuteKey = settings.value(QStringLiteral("toggleMuteKey"), 0).toInt();
     result.inputVolume = settings.value(QStringLiteral("inputVolume"), 1.0).toFloat();
     result.outputVolume = settings.value(QStringLiteral("outputVolume"), 1.0).toFloat();
     result.automaticSensitivity = settings.value(QStringLiteral("automaticSensitivity"), true).toBool();
@@ -37,6 +38,7 @@ void VoiceSettings::save() const
     settings.setValue(QStringLiteral("activationThresholdDb"), activationThresholdDb);
     settings.setValue(QStringLiteral("pushToTalkKey"), pushToTalkKey);
     settings.setValue(QStringLiteral("pushToTalkReleaseMs"), pushToTalkReleaseMs);
+    settings.setValue(QStringLiteral("toggleMuteKey"), toggleMuteKey);
     settings.setValue(QStringLiteral("inputVolume"), inputVolume);
     settings.setValue(QStringLiteral("outputVolume"), outputVolume);
     settings.setValue(QStringLiteral("automaticSensitivity"), automaticSensitivity);

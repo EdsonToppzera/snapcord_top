@@ -169,6 +169,7 @@ KeybindButton::KeybindButton(QWidget* parent)
     setMinimumWidth(200);
     connect(this, &QPushButton::clicked, this, [this] {
         m_recording = true;
+        setProperty("recordingKeybind", true);
         updateText();
         setFocus();
     });
@@ -220,6 +221,7 @@ void KeybindButton::focusOutEvent(QFocusEvent* event)
 void KeybindButton::stopRecording()
 {
     m_recording = false;
+    setProperty("recordingKeybind", false);
     updateText();
 }
 
@@ -389,6 +391,7 @@ SettingsDialog::SettingsDialog(VoiceController* voice, QWidget* parent)
     navigation->setFixedWidth(200);
     navigation->setFocusPolicy(Qt::NoFocus);
     navigation->addItem(tr("Voice & Audio"));
+    navigation->addItem(tr("Keybinds"));
     navigation->addItem(tr("Sound Effects"));
     navigation->addItem(tr("Appearance"));
     navigation->addItem(tr("Notifications"));
@@ -415,6 +418,7 @@ SettingsDialog::SettingsDialog(VoiceController* voice, QWidget* parent)
 
     m_settingsPages = new QStackedWidget;
     m_settingsPages->addWidget(buildVoicePage());
+    m_settingsPages->addWidget(buildKeybindsPage());
     m_settingsPages->addWidget(buildSoundsPage());
     m_settingsPages->addWidget(buildAppearancePage());
     m_settingsPages->addWidget(buildNotificationsPage());
@@ -608,6 +612,81 @@ QWidget* SettingsDialog::buildVoicePage()
     });
     m_releaseDelayLabel->setText(tr("%1 ms").arg(m_releaseDelay->value()));
     updateModeWidgets();
+
+    auto* scroll = new QScrollArea;
+    scroll->setWidget(content);
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    return scroll;
+}
+
+QWidget* SettingsDialog::buildKeybindsPage()
+{
+    m_toggleMuteKeybind = new KeybindButton;
+    m_toggleMuteKeybind->setKey(m_settings.toggleMuteKey);
+
+    m_clearToggleMuteKeybind = new QPushButton(tr("Clear"));
+    m_clearToggleMuteKeybind->setObjectName(QStringLiteral("secondaryButton"));
+    m_clearToggleMuteKeybind->setCursor(Qt::PointingHandCursor);
+    m_clearToggleMuteKeybind->setVisible(m_settings.toggleMuteKey != 0);
+
+    auto* actionTitle = new QLabel(tr("Toggle Mute"));
+    auto* actionHint = new QLabel(tr("Turns your microphone transmission on or off."));
+    actionHint->setObjectName(QStringLiteral("settingsHint"));
+    actionHint->setWordWrap(true);
+
+    auto* actionColumn = new QVBoxLayout;
+    actionColumn->setSpacing(4);
+    actionColumn->addWidget(sectionLabel(tr("Action")));
+    actionColumn->addSpacing(4);
+    actionColumn->addWidget(actionTitle);
+    actionColumn->addWidget(actionHint);
+
+    auto* keybindRow = new QHBoxLayout;
+    keybindRow->setSpacing(8);
+    keybindRow->addWidget(m_toggleMuteKeybind, 1);
+    keybindRow->addWidget(m_clearToggleMuteKeybind);
+
+    auto* keybindColumn = new QVBoxLayout;
+    keybindColumn->setSpacing(4);
+    keybindColumn->addWidget(sectionLabel(tr("Keybind")));
+    keybindColumn->addSpacing(4);
+    keybindColumn->addLayout(keybindRow);
+    keybindColumn->addStretch();
+
+    auto* row = new QHBoxLayout;
+    row->setSpacing(24);
+    row->addLayout(actionColumn, 1);
+    row->addLayout(keybindColumn, 1);
+
+    auto* content = new QWidget;
+    content->setObjectName(QStringLiteral("settingsContent"));
+    content->setAttribute(Qt::WA_StyledBackground);
+    auto* layout = new QVBoxLayout(content);
+    layout->setContentsMargins(40, 32, 40, 32);
+    layout->setSpacing(12);
+    auto* title = new QLabel(tr("Keybinds"));
+    title->setObjectName(QStringLiteral("settingsTitle"));
+    layout->addWidget(title);
+    layout->addSpacing(8);
+    layout->addLayout(row);
+    if (!KeyState::isSupported()) {
+        auto* unsupported = new QLabel(tr("Push to Talk is not available on this system yet."));
+        unsupported->setObjectName(QStringLiteral("settingsHint"));
+        layout->addWidget(unsupported);
+    }
+    layout->addStretch();
+
+    connect(m_toggleMuteKeybind, &KeybindButton::keyChanged, this, [this] {
+        m_clearToggleMuteKeybind->setVisible(m_toggleMuteKeybind->key() != 0);
+        apply();
+    });
+    connect(m_clearToggleMuteKeybind, &QPushButton::clicked, this, [this] {
+        m_toggleMuteKeybind->setKey(0);
+        m_clearToggleMuteKeybind->setVisible(false);
+        apply();
+    });
 
     auto* scroll = new QScrollArea;
     scroll->setWidget(content);
@@ -1642,6 +1721,7 @@ void SettingsDialog::apply()
     m_settings.activationThresholdDb = m_meter->threshold();
     m_settings.pushToTalkKey = m_keybind->key();
     m_settings.pushToTalkReleaseMs = m_releaseDelay->value();
+    m_settings.toggleMuteKey = m_toggleMuteKeybind->key();
     m_settings.automaticSensitivity = m_automaticSensitivity->isChecked();
     m_settings.noiseSuppression = m_noiseSuppression->isChecked();
     m_settings.echoCancellation = m_echoCancellation->isChecked();

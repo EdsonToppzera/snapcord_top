@@ -1,12 +1,16 @@
 #include "VoiceController.h"
 
 #include "core/Session.h"
+#include "platform/KeyState.h"
 
+#include <QApplication>
 #include <QSettings>
+#include <QWidget>
 
 namespace {
 
 constexpr int PingHistorySize = 60;
+constexpr int HotkeyPollIntervalMs = 30;
 
 } // namespace
 
@@ -29,6 +33,10 @@ VoiceController::VoiceController(Session* session, QObject* parent)
     m_sounds->setVolume(voiceSettings.outputVolume);
     m_sounds->loadStyles();
     m_participantMuteSounds = voiceSettings.participantMuteSounds;
+    m_toggleMuteKey = voiceSettings.toggleMuteKey;
+    m_hotkeyTimer.setInterval(HotkeyPollIntervalMs);
+    connect(&m_hotkeyTimer, &QTimer::timeout, this, &VoiceController::pollHotkeys);
+    updateHotkeyTimer();
 
     connect(m_session, &Session::ownVoiceStateChanged, this, &VoiceController::onOwnVoiceState);
     connect(m_session, &Session::voiceServerUpdated, this, &VoiceController::onVoiceServer);
@@ -208,6 +216,9 @@ void VoiceController::applySettings(const VoiceSettings& settings)
     m_sounds->setOutputDevice(settings.outputDevice);
     m_sounds->setVolume(settings.outputVolume);
     m_participantMuteSounds = settings.participantMuteSounds;
+    m_toggleMuteKey = settings.toggleMuteKey;
+    m_toggleMuteKeyDown = m_toggleMuteKey != 0 && KeyState::isDown(m_toggleMuteKey);
+    updateHotkeyTimer();
 }
 
 void VoiceController::sendVoiceState()
@@ -303,4 +314,32 @@ void VoiceController::maybeConnect()
     // Voice tokens are single-use: a reconnect needs a new voice server update.
     m_voiceToken.clear();
     m_connection->connectTo(credentials, m_channelId);
+}
+
+void VoiceController::updateHotkeyTimer()
+{
+    if (KeyState::isSupported() && m_toggleMuteKey != 0) {
+        if (!m_hotkeyTimer.isActive()) {
+            m_toggleMuteKeyDown = KeyState::isDown(m_toggleMuteKey);
+            m_hotkeyTimer.start();
+        }
+    } else {
+        m_hotkeyTimer.stop();
+        m_toggleMuteKeyDown = false;
+    }
+}
+
+void VoiceController::pollHotkeys()
+{
+    if (m_toggleMuteKey == 0)
+        return;
+    const bool down = KeyState::isDown(m_toggleMuteKey);
+    if (QWidget* focused = QApplication::focusWidget();
+        focused && focused->property("recordingKeybind").toBool()) {
+        m_toggleMuteKeyDown = down;
+        return;
+    }
+    if (down && !m_toggleMuteKeyDown)
+        toggleMute();
+    m_toggleMuteKeyDown = down;
 }

@@ -2755,6 +2755,37 @@
         <source>Later</source>
         <translation>Depois</translation>
     </message>
+    <message>
+        <location filename="../src/app/SettingsDialog.cpp" line="394"/>
+        <location filename="../src/app/SettingsDialog.cpp" line="669"/>
+        <source>Keybinds</source>
+        <translation>Atalhos do teclado</translation>
+    </message>
+    <message>
+        <location filename="../src/app/SettingsDialog.cpp" line="641"/>
+        <source>Action</source>
+        <translation>Ação de atalho do teclado</translation>
+    </message>
+    <message>
+        <location filename="../src/app/SettingsDialog.cpp" line="653"/>
+        <source>Keybind</source>
+        <translation>Atalho do teclado</translation>
+    </message>
+    <message>
+        <location filename="../src/app/SettingsDialog.cpp" line="634"/>
+        <source>Toggle Mute</source>
+        <translation>Ativar/desativar microfone</translation>
+    </message>
+    <message>
+        <location filename="../src/app/SettingsDialog.cpp" line="635"/>
+        <source>Turns your microphone transmission on or off.</source>
+        <translation>Ativa ou desativa a transmissão do seu microfone.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/SettingsDialog.cpp" line="629"/>
+        <source>Clear</source>
+        <translation>Limpar</translation>
+    </message>
 </context>
 <context>
     <name>UpdateChecker</name>
