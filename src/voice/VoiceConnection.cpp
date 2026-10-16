@@ -25,8 +25,8 @@ constexpr int SilenceFramesAfterSpeech = 5;
 // Voice activity stays on for 300 ms after the level drops below the threshold.
 constexpr int VoiceHangoverFrames = 15;
 // Automatic input sensitivity: RNNoise voice probability needed to transmit, and a level floor.
-constexpr float VoiceProbabilityThreshold = 0.6f;
-constexpr float AutomaticSensitivityFloorDb = -60.0f;
+constexpr float VoiceProbabilityThreshold = 0.5f;
+constexpr float AutomaticSensitivityFloorDb = -70.0f;
 // A remote user counts as speaking for this long after their last audio packet.
 constexpr int64_t SpeakingTimeoutMs = 250;
 constexpr int64_t KeepAliveIntervalMs = 5000;
@@ -75,6 +75,7 @@ VoiceConnection::VoiceConnection(QObject* parent)
     , m_processChunk(AudioProcessor::FrameSize)
     , m_echoChunk(AudioProcessor::FrameSize)
     , m_captureFrame(FrameSamples)
+    , m_preRollFrame(FrameSamples)
     , m_stereoFrame(StereoFrameSamples)
     , m_opusPacket(OpusFormat::MaxPacketSize)
     , m_mixFrame(StereoFrameSamples)
@@ -315,9 +316,12 @@ void VoiceConnection::startMedia()
     m_encoder = std::make_unique<OpusEncoderWrapper>();
     m_captureFill = 0;
     m_processFill = 0;
+    m_hasPreRollFrame = false;
     m_frameVoiceProbability = -1.0f;
     m_echoReference.clear();
     m_inboundPacketLoss = 0.0;
+    m_sequence = 0;
+    m_timestamp = 0;
     m_transmitting = false;
     m_voiceHangoverFrames = 0;
     m_silenceFramesToSend = 0;
@@ -539,25 +543,23 @@ void VoiceConnection::processCaptureFrame()
     }
 
     if (transmit) {
-        m_stats.transmittedFrames.fetch_add(1, std::memory_order_relaxed);
         if (!m_transmitting) {
             m_transmitting = true;
             m_silenceFramesToSend = 0;
             QMetaObject::invokeMethod(this, [this] { m_gateway.sendSpeaking(SpeakingFlagVoice, m_ssrc); },
                                       Qt::QueuedConnection);
+            // Send the 20 ms frame captured right before VAD opened so the start of a word isn't clipped.
+            if (m_hasPreRollFrame) {
+                m_hasPreRollFrame = false;
+                m_stats.transmittedFrames.fetch_add(1, std::memory_order_relaxed);
+                encodeAndSend(m_preRollFrame, m_timestamp - static_cast<uint32_t>(FrameSamples));
+            }
         }
-        for (size_t i = 0; i < FrameSamples; ++i) {
-            const float sample = std::clamp(m_captureFrame[i], -1.0f, 1.0f);
-            m_stereoFrame[2 * i] = sample;
-            m_stereoFrame[2 * i + 1] = sample;
-        }
-        const int size = m_encoder ? m_encoder->encode(m_stereoFrame.data(), m_opusPacket.data(),
-                                                       static_cast<int>(m_opusPacket.size()))
-                                   : 0;
-        if (size > 0)
-            sendFrame(m_opusPacket.data(), static_cast<size_t>(size), true);
+        m_stats.transmittedFrames.fetch_add(1, std::memory_order_relaxed);
+        encodeAndSend(m_captureFrame, m_timestamp);
     } else if (m_transmitting) {
         m_transmitting = false;
+        m_hasPreRollFrame = false;
         m_silenceFramesToSend = SilenceFramesAfterSpeech;
         QMetaObject::invokeMethod(this, [this] { m_gateway.sendSpeaking(0, m_ssrc); }, Qt::QueuedConnection);
     }
@@ -565,13 +567,37 @@ void VoiceConnection::processCaptureFrame()
     if (!transmit && m_silenceFramesToSend > 0) {
         --m_silenceFramesToSend;
         // Silence frames are not end-to-end encrypted: DAVE passes them through untouched.
-        sendFrame(SilenceFrame, sizeof(SilenceFrame), false);
+        sendFrame(SilenceFrame, sizeof(SilenceFrame), m_timestamp, false);
+    } else if (!transmit) {
+        if (!muted) {
+            std::copy(m_captureFrame.begin(), m_captureFrame.end(), m_preRollFrame.begin());
+            m_hasPreRollFrame = true;
+        } else {
+            m_hasPreRollFrame = false;
+        }
     }
 
+    // The RTP timestamp reflects the 48 kHz sampling clock and must advance even during silent frames,
+    // otherwise remote WebRTC receivers treat silent pauses as network jitter spikes and inflate their buffer.
+    m_timestamp += static_cast<uint32_t>(FrameSamples);
     m_selfSpeaking.store(transmit, std::memory_order_relaxed);
 }
 
-void VoiceConnection::sendFrame(const uint8_t* opus, size_t size, bool endToEndEncrypt)
+void VoiceConnection::encodeAndSend(const std::vector<float>& monoFrame, uint32_t timestamp)
+{
+    for (size_t i = 0; i < FrameSamples; ++i) {
+        const float sample = std::clamp(monoFrame[i], -1.0f, 1.0f);
+        m_stereoFrame[2 * i] = sample;
+        m_stereoFrame[2 * i + 1] = sample;
+    }
+    const int size = m_encoder ? m_encoder->encode(m_stereoFrame.data(), m_opusPacket.data(),
+                                                   static_cast<int>(m_opusPacket.size()))
+                               : 0;
+    if (size > 0)
+        sendFrame(m_opusPacket.data(), static_cast<size_t>(size), timestamp, true);
+}
+
+void VoiceConnection::sendFrame(const uint8_t* opus, size_t size, uint32_t timestamp, bool endToEndEncrypt)
 {
     if (!m_cipher)
         return;
@@ -587,8 +613,7 @@ void VoiceConnection::sendFrame(const uint8_t* opus, size_t size, bool endToEndE
     }
 
     uint8_t header[Rtp::FixedHeaderSize];
-    Rtp::writeHeader(header, m_sequence++, m_timestamp, m_ssrc);
-    m_timestamp += static_cast<uint32_t>(FrameSamples);
+    Rtp::writeHeader(header, m_sequence++, timestamp, m_ssrc);
     if (m_cipher->seal(header, sizeof(header), payload, payloadSize, m_udpPacket)
         && m_udp.send(m_udpPacket.data(), m_udpPacket.size())) {
         m_stats.sent.fetch_add(1, std::memory_order_relaxed);

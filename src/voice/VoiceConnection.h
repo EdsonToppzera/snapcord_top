@@ -85,7 +85,8 @@ private:
     void captureSamples(const float* samples, int count);
     void processChunk();
     void processCaptureFrame();
-    void sendFrame(const uint8_t* opus, size_t size, bool endToEndEncrypt);
+    void encodeAndSend(const std::vector<float>& monoFrame, uint32_t timestamp);
+    void sendFrame(const uint8_t* opus, size_t size, uint32_t timestamp, bool endToEndEncrypt);
     void renderPlayback(float* output, int frameCount);
     void mixNextFrame();
     // Puts the stream's next 20 ms (or less, when it runs dry) in m_decodeFrame; returns the samples per channel.
@@ -137,6 +138,8 @@ private:
     std::vector<float> m_echoChunk;
     float m_frameVoiceProbability = -1.0f;
     std::vector<float> m_captureFrame;
+    std::vector<float> m_preRollFrame;
+    bool m_hasPreRollFrame = false;
     size_t m_captureFill = 0;
     std::vector<float> m_stereoFrame;
     std::vector<uint8_t> m_opusPacket;
